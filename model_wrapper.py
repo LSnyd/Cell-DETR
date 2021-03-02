@@ -471,3 +471,138 @@ class ModelWrapper(object):
                             value=float(np.mean(metric_values[~np.isnan(metric_values)])))
         # Save metrics
         self.logger.save_metrics(path=self.path_save_metrics)
+
+    @torch.no_grad()
+    def inference(self, num_classes) -> None:
+        """
+        Inference method: plots segmentation mask and bounding boxes for visual inspections.
+        """
+
+        colormap = dict.fromkeys(list(range(0, num_classes + 2)))
+
+        for key in colormap.keys():
+            r = float(np.random.randint(0, 255)) / 255
+            g = float(np.random.randint(0, 255)) / 255
+            b = float(np.random.randint(0, 255)) / 255
+            colormap[key] = (r, g, b)
+
+        # DETR to device
+        self.detr.to(self.device)
+        # DETR into eval mode
+        self.detr.eval()
+        # Init dicts to store metrics
+        metrics_classification = dict()
+        metrics_bounding_box = dict()
+        metrics_segmentation = dict()
+        # Main loop over the test set
+        for index, batch in enumerate(self.test_dataset):
+            # Get data from batch
+            input, instance_labels, bounding_box_labels, class_labels = batch
+            # Data to device
+            input = input.to(self.device)
+            instance_labels = misc.iterable_to_device(instance_labels, device=self.device)
+            bounding_box_labels = misc.iterable_to_device(bounding_box_labels, device=self.device)
+            class_labels = misc.iterable_to_device(class_labels, device=self.device)
+            # Get prediction
+            class_predictions, bounding_box_predictions, instance_predictions = self.detr(input)
+
+            # Perform matching
+            matching_indexes = self.loss_function.matcher(class_predictions, bounding_box_predictions,
+                                                          class_labels, bounding_box_labels)
+            # Apply permutation to labels and predictions
+            class_predictions, class_labels = self.loss_function.apply_permutation(prediction=class_predictions,
+                                                                                   label=class_labels,
+                                                                                   indexes=matching_indexes)
+            bounding_box_predictions, bounding_box_labels = self.loss_function.apply_permutation(
+                prediction=bounding_box_predictions,
+                label=bounding_box_labels,
+                indexes=matching_indexes)
+            instance_predictions, instance_labels = self.loss_function.apply_permutation(
+                prediction=instance_predictions,
+                label=instance_labels,
+                indexes=matching_indexes)
+
+            # Plot
+            object_classes = class_predictions[0].argmax(dim=-1).cpu().detach()
+            # Case the no objects are detected
+            if object_classes.shape[0] > 0:
+                object_indexes = torch.from_numpy(np.argwhere(object_classes.numpy() > 0)[:, 0])
+                bounding_box_predictions = misc.relative_bounding_box_to_absolute(
+                    misc.bounding_box_xcycwh_to_x0y0x1y1(
+                        bounding_box_predictions[0, object_indexes].cpu().clone().detach()), height=input.shape[-2],
+                    width=input.shape[-1])
+
+                misc.plot_instance_segmentation_overlay_instances(image=input[0],
+                                                                  instances=(instance_predictions[0][
+                                                                                 object_indexes] > 0.5).float(),
+                                                                  class_labels=object_classes[object_indexes],
+                                                                  colors=colormap,
+                                                                  show=True, save=False,
+                                                                  file_path=os.path.join(
+                                                                      self.path_save_plots,
+                                                                      "test_plot_{}_is.png".format(index)))
+                misc.plot_instance_segmentation_overlay_bb_classes(image=input[0],
+                                                                   bounding_boxes=bounding_box_predictions,
+                                                                   class_labels=object_classes[
+                                                                       object_indexes],
+                                                                   colors=colormap,
+                                                                   class_list=self.class_labels,
+                                                                   show=True, save=False,
+                                                                   file_path=os.path.join(
+                                                                       self.path_save_plots,
+                                                                       "test_plot_{}_bb_c.png".format(
+                                                                           index)))
+
+#                   misc.plot_instance_segmentation_overlay_instances_bb_classes(image=input[0],
+#                                                                     bounding_boxes=bounding_box_predictions,
+#                                                                     instances=(instance_predictions[0][
+#                                                                                 object_indexes] > 0.5).float(),
+#                                                                 class_labels=object_classes[
+#                                                                     object_indexes],
+# class_list=self.class_labels,
+#                                                                      colors=colormap,
+#                                                                     show=True, save=False,
+#                                                                    file_path=os.path.join(
+#                                                                       self.path_save_plots,
+#                                                                      "test_plot_{}_bbn_c.png".format(
+#                                                                        index)))
+
+
+#                  misc.plot_instance_segmentation_labels(
+#                                                                    bounding_boxes=bounding_box_predictions,
+#                                                                    instances=(instance_predictions[0][
+#                                                                                object_indexes] > 0.5).float(),
+#                                                                class_labels=object_classes[
+#                                                                    object_indexes], class_list=self.class_labels,
+
+#                     colors=colormap,
+#                    show=True, save=False,
+#                   file_path=os.path.join(
+#                      self.path_save_plots,
+#                     "test_plot_{}_bbn_c.png".format(
+#                       index)))
+
+#      misc.plot_instance_segmentation_map_label(
+#                                                         instances=(instance_predictions[0][
+#                                                                     object_indexes] > 0.5).float(),
+#                                                     class_labels=object_classes[
+#                                                         object_indexes],
+#                                                    colors=colormap,
+#                                                   show=True, save=False,
+#                                                  file_path=os.path.join(
+#                                                     self.path_save_plots,
+#                                                    "test_plot_{}_bbn_c.png".format(
+#                                                      index)))
+#            misc.plot_instance_segmentation_instances(instances=(instance_predictions[0][
+#                                                                            object_indexes] > 0.5).float(),
+#                                                            class_labels=object_classes[
+#                                                                object_indexes],
+#                                                          colors=colormap,
+#                                                           show=True, save=False,
+#                                                         file_path=os.path.join(
+#                                                            self.path_save_plots,
+#                                                           "test_plot_{}_bbn_c.png".format(
+#                                                             index)))
+
+
+
