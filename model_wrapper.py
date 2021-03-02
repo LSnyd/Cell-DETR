@@ -36,7 +36,7 @@ class ModelWrapper(object):
                  loss_function: nn.Module,
                  learning_rate_schedule: torch.optim.lr_scheduler.MultiStepLR = None,
                  device: str = "cuda",
-                 save_data_path: str = "saved_data",
+                 save_data_path: str = "model_zoo/Cell-DETR",
                  use_telegram: bool = True) -> None:
         """
         Constructor method
