@@ -12,6 +12,9 @@ import setproctitle
 from detr import CellDETR
 import misc
 import validation_metric
+from PIL import Image
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 
 class ModelWrapper(object):
@@ -27,6 +30,9 @@ class ModelWrapper(object):
                  training_dataset: DataLoader,
                  validation_dataset: DataLoader,
                  test_dataset: DataLoader,
+                 class_labels: ["11", "12", "13", "14", "15", "16", "17", "18", "21", "22", "23", "24", "25", "26",
+                                "27", "28", "31", "32", "33", "34", "35", "36", "37", "38", "41", "42", "43", "44",
+                                "45", "46", "47", "48"],
                  loss_function: nn.Module,
                  learning_rate_schedule: torch.optim.lr_scheduler.MultiStepLR = None,
                  device: str = "cuda",
@@ -53,6 +59,7 @@ class ModelWrapper(object):
         self.training_dataset = training_dataset
         self.validation_dataset = validation_dataset
         self.test_dataset = test_dataset
+        self.class_labels = class_labels
         self.loss_function = loss_function
         self.learning_rate_schedule = learning_rate_schedule
         self.device = device
@@ -177,7 +184,7 @@ class ModelWrapper(object):
         metrics_bounding_box = dict()
         metrics_segmentation = dict()
         # Init indexes of elements to be plotted
-        plot_indexes = np.random.choice(np.arange(0, len(self.validation_dataset)), number_of_plots, replace=False)
+        plot_indexes = np.random.choice(np.arange(0, len(self.validation_dataset)), number_of_plots, replace=True)
         # Main loop over the validation set
         for index, batch in enumerate(self.validation_dataset):
             # Get data from batch
@@ -204,6 +211,7 @@ class ModelWrapper(object):
                 prediction=instance_predictions,
                 label=instance_labels,
                 indexes=matching_indexes)
+
             for batch_index in range(len(class_labels)):
                 # Calc validation metrics for classification
                 for validation_metric_classification in validation_metrics_classification:
@@ -254,6 +262,7 @@ class ModelWrapper(object):
                                                                                  bounding_boxes=bounding_box_predictions,
                                                                                  class_labels=object_classes[
                                                                                      object_indexes],
+                                                                                 class_list=self.class_labels,
                                                                                  show=False, save=True,
                                                                                  file_path=os.path.join(
                                                                                      self.path_save_plots,
@@ -284,7 +293,8 @@ class ModelWrapper(object):
         self.logger.save_metrics(path=self.path_save_metrics)
 
     @torch.no_grad()
-    def test(self, test_metrics_classification: Tuple[nn.Module, ...] = (validation_metric.ClassificationAccuracy(),),
+    def test(self, num_classes,
+             test_metrics_classification: Tuple[nn.Module, ...] = (validation_metric.ClassificationAccuracy(),),
              test_metrics_bounding_box: Tuple[nn.Module, ...] = (
                      nn.L1Loss(), nn.MSELoss(), validation_metric.BoundingBoxIoU(),
                      validation_metric.BoundingBoxGIoU()),
@@ -299,6 +309,15 @@ class ModelWrapper(object):
         :param test_metrics_bounding_box: (Tuple[nn.Module, ...]) Test modules for bounding boxes
         :param test_metrics_segmentation: (Tuple[nn.Module, ...]) Test modules for segmentation
         """
+
+        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
+
+        for key in colormap.keys():
+            r = float(np.random.randint(0, 255)) / 255
+            g = float(np.random.randint(0, 255)) / 255
+            b = float(np.random.randint(0, 255)) / 255
+            colormap[key] = (r, g, b)
+
         # DETR to device
         self.detr.to(self.device)
         # DETR into eval mode
@@ -383,6 +402,8 @@ class ModelWrapper(object):
                                                                              bounding_boxes=bounding_box_predictions,
                                                                              class_labels=object_classes[
                                                                                  object_indexes],
+                                                                             class_list=self.class_labels,
+                                                                             colors=colormap,
                                                                              show=False, save=True,
                                                                              file_path=os.path.join(
                                                                                  self.path_save_plots,
@@ -394,6 +415,8 @@ class ModelWrapper(object):
                                                                              bounding_boxes=bounding_box_predictions,
                                                                              class_labels=object_classes[
                                                                                  object_indexes],
+                                                                             colors=colormap,
+                                                                             class_list=self.class_labels,
                                                                              show=False, save=True,
                                                                              show_class_label=False,
                                                                              file_path=os.path.join(
@@ -404,6 +427,7 @@ class ModelWrapper(object):
                                                                   instances=(instance_predictions[0][
                                                                                  object_indexes] > 0.5).float(),
                                                                   class_labels=object_classes[object_indexes],
+                                                                  colors=colormap,
                                                                   show=False, save=True,
                                                                   file_path=os.path.join(
                                                                       self.path_save_plots,
@@ -412,6 +436,8 @@ class ModelWrapper(object):
                                                                    bounding_boxes=bounding_box_predictions,
                                                                    class_labels=object_classes[
                                                                        object_indexes],
+                                                                   colors=colormap,
+                                                                   class_list=self.class_labels,
                                                                    show=False, save=True,
                                                                    file_path=os.path.join(
                                                                        self.path_save_plots,
@@ -420,12 +446,13 @@ class ModelWrapper(object):
                 misc.plot_instance_segmentation_labels(
                     instances=(instance_predictions[0][object_indexes] > 0.5).float(),
                     bounding_boxes=bounding_box_predictions,
-                    class_labels=object_classes[object_indexes], show=False, save=True,
+                    class_labels=object_classes[object_indexes], class_list=self.class_labels, colors=colormap,
+                    show=False, save=True,
                     file_path=os.path.join(self.path_save_plots, "test_plot_{}_bb_no_overlay_.png".format(index)),
                     show_class_label=False, white_background=True)
                 misc.plot_instance_segmentation_map_label(
                     instances=(instance_predictions[0][object_indexes] > 0.5).float(),
-                    class_labels=object_classes[object_indexes], show=False, save=True,
+                    class_labels=object_classes[object_indexes], colors=colormap, show=False, save=True,
                     file_path=os.path.join(self.path_save_plots, "test_plot_{}_no_overlay.png".format(index)),
                     white_background=True)
         # Average metrics and save them in logs
