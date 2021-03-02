@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from skimage.color import gray2rgb
 from torchvision.utils import save_image
+from numpy import random
 
 
 def to_one_hot(input: torch.Tensor, num_classes: int) -> torch.Tensor:
@@ -171,32 +172,14 @@ def absolute_bounding_box_to_relative(bounding_boxes: torch.Tensor, height: int,
 
 def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor, instances: torch.Tensor,
                                                             bounding_boxes: torch.Tensor,
-                                                            class_labels: torch.Tensor, save: bool = False,
+                                                            class_labels: torch.Tensor, class_list: torch.Tensor,
+                                                            save: bool = False,
                                                             show: bool = False,
-                                                            file_path: str = "", alpha: float = 0.3,
+                                                            file_path: str = "", alpha: float = 0.8,
                                                             show_class_label: bool = True,
-                                                            colors_traps: Tuple[Tuple[float, float, float], ...] = (
+                                                            colors: Tuple[Tuple[float, float, float], ...] = (
                                                                     (0.05, 0.05, 0.05),
-                                                                    (0.25, 0.25, 0.25)),
-                                                            cell_classes: Tuple[int, ...] = (2, 3),
-                                                            colors_cells: Tuple[Tuple[float, float, float], ...] = (
-                                                                    (1.0, 1.0, 0.0),
-                                                                    (0.5, 1.0, 0.0),
-                                                                    (0.0, 0.625, 1.0),
-                                                                    (1.0, 0.0, 0.0),
-                                                                    (0.125, 1.0, 0.0),
-                                                                    (1.0, 0.375, 0.0),
-                                                                    (1.0, 0.0, 0.375),
-                                                                    (1.0, 0.0, 0.75),
-                                                                    (0.5, 0.0, 1.0),
-                                                                    (1.0, 0.75, 0.0),
-                                                                    (0.125, 0.0, 1.0),
-                                                                    (0.0, 1.0, 0.625),
-                                                                    (0.0, 1.0, 0.25),
-                                                                    (0.0, 0.25, 1.0),
-                                                                    (0.875, 0.0, 1.0),
-                                                                    (0.875, 1.0,
-                                                                     0.0))) -> None:
+                                                                    (0.25, 0.25, 0.25)), ) -> None:
     """
     Function produces an instance segmentation plot
     :param image: (torch.Tensor) Input image of shape (3, height, width) or (1, height, width)
@@ -208,9 +191,7 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
     :param file_path: (str) Path and name where image will be stored
     :param show_class_label: (bool) If true class label will be shown in plot
     :param alpha: (float) Transparency factor of the instances
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
-    :param cell_classes: (Tuple[int, ...]) Tuple of cell classes
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize eachinstances.
     """
     # Normalize image to [0, 255]
     image = normalize_0_1(image)
@@ -222,70 +203,37 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
     # Convert grayscale image to rgb
     if image.shape[-1] == 1:
         image = gray2rgb(image=image[:, :, 0])
-    # Init counters
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Add instances to image
     for index, instance in enumerate(instances):
-        # Case of cell instances
-        if bool(class_labels[index] >= min(cell_classes)):
-            for c in range(image.shape[-1]):
-                image[:, :, c] = np.where(instance == 1,
-                                          image[:, :, c] * (1 - alpha) + alpha *
-                                          colors_cells[min(counter_cell_instance, len(colors_cells) - 1)][c],
-                                          image[:, :, c])
-            counter_cell_instance += 1
-        # Case of trap class
-        else:
-            for c in range(image.shape[-1]):
-                image[:, :, c] = np.where(instance == 1,
-                                          image[:, :, c] * (1 - alpha) + alpha *
-                                          colors_traps[min(counter_trap_instance, len(colors_traps) - 1)][c],
-                                          image[:, :, c])
-            counter_trap_instance += 1
+        for c in range(image.shape[-1]):
+            image[:, :, c] = np.where(instance == 1,
+                                      image[:, :, c] * (1 - alpha) + alpha * colors[class_labels[index]][c],
+                                      image[:, :, c])
+
     # Init figure
     fig, ax = plt.subplots()
     # Set size
     fig.set_size_inches(5, 5 * image.shape[0] / image.shape[1])
     # Plot image and instances
     ax.imshow(image)
-    # Init counters
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Plot bounding_boxes and classes
     for index, bounding_box in enumerate(bounding_boxes):
-        # Case if cell is present
-        if bool(class_labels[index] >= min(cell_classes)):
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_cells[min(counter_cell_instance, len(colors_cells) - 1)],
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
-                        'Cell', horizontalalignment='right', verticalalignment='bottom',
-                        color="white", size=15)
-            # Increment counter
-            counter_cell_instance += 1
-        # Cas if trap is present
-        else:
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_traps[min(counter_trap_instance, len(colors_traps) - 1)],
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
-                        'Trap', horizontalalignment='right', verticalalignment='bottom',
-                        color="white", size=15)
-            # Increment counter
-            counter_trap_instance += 1
+
+        rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
+                                      float(bounding_box[2]) - float(bounding_box[0]),
+                                      float(bounding_box[3]) - float(bounding_box[1]),
+                                      linewidth=1,
+                                      edgecolor=colors[class_labels[index]],
+                                      facecolor='none')
+        ax.add_patch(rectangle)
+        if show_class_label:
+            ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
+                    float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
+                    class_list[class_labels[index] - 1], horizontalalignment='right', verticalalignment='bottom',
+                    color="white", size=8)
+
     # Axis off
     ax.set_axis_off()
     ax.get_xaxis().set_visible(False)
@@ -295,7 +243,7 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
         plt.savefig(file_path, dpi=image.shape[1] * 4 / 3.845, transparent=True, bbox_inches='tight', pad_inches=0)
     # Show figure if utilized
     if show:
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
     # Close figure
     plt.close()
 
@@ -303,20 +251,11 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
 def plot_instance_segmentation_overlay_instances(image: torch.Tensor, instances: torch.Tensor,
                                                  class_labels: torch.Tensor, save: bool = False, show: bool = False,
                                                  file_path: str = "",
-                                                 alpha: float = 0.5,
-                                                 colors_cells: Tuple[Tuple[float, float, float], ...] = (
-                                                         (1., 0., 0.89019608),
-                                                         (1., 0.5, 0.90980392),
-                                                         (0.7, 0., 0.70980392),
-                                                         (0.7, 0.5, 0.73333333),
-                                                         (0.5, 0., 0.53333333),
-                                                         (0.5, 0.2, 0.55294118),
-                                                         (0.3, 0., 0.45),
-                                                         (0.3, 0.2, 0.45)),
-                                                 colors_traps: Tuple[Tuple[float, float, float], ...] = (
+                                                 alpha: float = 0.8,
+                                                 colors: Tuple[Tuple[float, float, float], ...] = (
                                                          (0.05, 0.05, 0.05),
                                                          (0.25, 0.25, 0.25)),
-                                                 cell_classes: Tuple[int, ...] = (2, 3)) -> None:
+                                                 ) -> None:
     """
     Function produces an instance segmentation plot
     :param image: (torch.Tensor) Input image of shape (3, height, width) or (1, height, width)
@@ -326,10 +265,9 @@ def plot_instance_segmentation_overlay_instances(image: torch.Tensor, instances:
     :param show: (bool) If true plt.show() will be called
     :param file_path: (str) Path and name where image will be stored
     :param alpha: (float) Transparency factor
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
-    :param cell_classes: (Tuple[int, ...]) Tuple of cell classes
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize eachinstances.
     """
+
     # Normalize image to [0, 1]
     image = normalize_0_1(image)
     # Convert data to numpy
@@ -339,27 +277,14 @@ def plot_instance_segmentation_overlay_instances(image: torch.Tensor, instances:
     # Convert grayscale image to rgb
     if image.shape[-1] == 1:
         image = gray2rgb(image=image[:, :, 0])
-    # Init counters
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Add instances to image
     for index, instance in enumerate(instances):
-        # Case of cell instances
-        if bool(class_labels[index] >= min(cell_classes)):
-            for c in range(image.shape[-1]):
-                image[:, :, c] = np.where(instance == 1,
-                                          image[:, :, c] * (1 - alpha) + alpha *
-                                          colors_cells[min(counter_cell_instance, len(colors_cells) - 1)][c],
-                                          image[:, :, c])
-            counter_cell_instance += 1
-        # Case of trap class
-        else:
-            for c in range(image.shape[-1]):
-                image[:, :, c] = np.where(instance == 1,
-                                          image[:, :, c] * (1 - alpha) + alpha *
-                                          colors_traps[min(counter_trap_instance, len(colors_traps) - 1)][c],
-                                          image[:, :, c])
-            counter_trap_instance += 1
+        for c in range(image.shape[-1]):
+            image[:, :, c] = np.where(instance == 1,
+                                      image[:, :, c] * (1 - alpha) + alpha *
+                                      colors[class_labels[index]][c],
+                                      image[:, :, c])
 
     # Init figure
     fig, ax = plt.subplots()
@@ -376,26 +301,18 @@ def plot_instance_segmentation_overlay_instances(image: torch.Tensor, instances:
         plt.savefig(file_path, dpi=image.shape[1] * 4 / 3.845, transparent=True, bbox_inches='tight', pad_inches=0)
     # Show figure if utilized
     if show:
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
     # Close figure
     plt.close()
 
 
 def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: torch.Tensor,
-                                      class_labels: torch.Tensor, save: bool = False, show: bool = False,
+                                      class_labels: torch.Tensor, class_list: torch.Tensor, save: bool = False,
+                                      show: bool = False,
                                       file_path: str = "",
-                                      colors_cells: Tuple[Tuple[float, float, float], ...] = ((1., 0., 0.89019608),
-                                                                                              (1., 0.5, 0.90980392),
-                                                                                              (0.7, 0., 0.70980392),
-                                                                                              (0.7, 0.5, 0.73333333),
-                                                                                              (0.5, 0., 0.53333333),
-                                                                                              (0.5, 0.2, 0.55294118),
-                                                                                              (0.3, 0., 0.45),
-                                                                                              (0.3, 0.2, 0.45)),
-                                      colors_traps: Tuple[Tuple[float, float, float], ...] = (
-                                              (0.3, 0.3, 0.3),
-                                              (0.5, 0.5, 0.5)),
-                                      cell_classes: Tuple[int, ...] = (2, 3), white_background: bool = False,
+                                      colors: Tuple[Tuple[float, float, float], ...] = (
+                                              (0.05, 0.05, 0.05),
+                                              (0.25, 0.25, 0.25)), white_background: bool = False,
                                       show_class_label: bool = True) -> None:
     """
     Function plots given instance segmentation labels including the pixel-wise segmentation maps, bounding boxes,
@@ -403,11 +320,11 @@ def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: t
     :param instances: (torch.Tensor) Pixel-wise instance segmentation map
     :param bounding_boxes: (torch.Tensor) Bounding boxes of shape (instances, 4 (x1, y1, x2, y2))
     :param class_labels: (torch.Tensor) Class labels of each instance (instances, )
+    :param class_list: List of existing labels
     :param save: (bool) If true image will be saved (matplotlib is used)
     :param show: (bool) If true matplotlib plot of the image will be shown
     :param file_path: (str) Path and name where image will be stored
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize eachinstances.
     :param white_background: (bool) If true a white background is utilized
     :param show_class_label: (bool) If true class name will be shown in the left bottom corner of each bounding box
     """
@@ -417,25 +334,13 @@ def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: t
     class_labels = class_labels.detach().cpu().numpy()
     # Init map to visualize instances
     instances_map = np.zeros((instances.shape[1], instances.shape[2], 3), dtype=np.float)
-    # Init counters to track the number of cells and traps for different colours
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Instances to instances map
     for instance, class_label in zip(instances, class_labels):
-        # Case if cell is present
-        if bool(class_label >= min(cell_classes)):
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instances_map += np.array(colors_cells[min(counter_cell_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                             * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_cell_instance += 1
-        # Cas if trap is present
-        else:
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instances_map += np.array(colors_traps[min(counter_trap_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                             * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_trap_instance += 1
+        # Add pixels of current instance, in the corresponding colour, to instances map
+        instances_map += np.array(colors[class_label]).reshape(1, 1, 3) \
+                         * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
+
     # Init figure
     fig, ax = plt.subplots()
     # Set size
@@ -448,43 +353,22 @@ def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: t
                     instances_map[h, w, :] = np.array([1.0, 1.0, 1.0])
     # Plot image and instances
     ax.imshow(instances_map)
-    # Init counters to track the number of cells and traps for different colours
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Plot bounding_boxes and classes
     for index, bounding_box in enumerate(bounding_boxes):
-        # Case if cell is present
-        if bool(class_labels[index] >= min(cell_classes)):
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_cells[min(counter_cell_instance, len(colors_cells) - 1)],
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
-                        'Cell', horizontalalignment='right', verticalalignment='bottom',
-                        color="black" if white_background else "white", size=15)
-            # Increment counter
-            counter_cell_instance += 1
-        # Cas if trap is present
-        else:
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_traps[min(counter_trap_instance, len(colors_traps) - 1)],
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
-                        'Trap', horizontalalignment='right', verticalalignment='bottom',
-                        color="black" if white_background else "white", size=15)
-            # Increment counter
-            counter_trap_instance += 1
+        rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
+                                      float(bounding_box[2]) - float(bounding_box[0]),
+                                      float(bounding_box[3]) - float(bounding_box[1]),
+                                      linewidth=1,
+                                      edgecolor=colors[class_labels[index]],
+                                      facecolor='none')
+        ax.add_patch(rectangle)
+        if show_class_label:
+            ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0]) - 2),
+                    float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1]) - 2),
+                    class_list[class_labels[index] - 1], horizontalalignment='right', verticalalignment='bottom',
+                    color="black" if white_background else "white", size=8)
+
     # Axis off
     ax.set_axis_off()
     ax.get_xaxis().set_visible(False)
@@ -495,25 +379,16 @@ def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: t
                     pad_inches=0)
     # Show figure if utilized
     if show:
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
     # Close figure
     plt.close()
 
 
 def plot_instance_segmentation_map_label(instances: torch.Tensor, class_labels: torch.Tensor, save: bool = False,
                                          show: bool = False, file_path: str = "",
-                                         colors_cells: Tuple[Tuple[float, float, float], ...] = ((1., 0., 0.89019608),
-                                                                                                 (1., 0.5, 0.90980392),
-                                                                                                 (0.7, 0., 0.70980392),
-                                                                                                 (0.7, 0.5, 0.73333333),
-                                                                                                 (0.5, 0., 0.53333333),
-                                                                                                 (0.5, 0.2, 0.55294118),
-                                                                                                 (0.3, 0., 0.45),
-                                                                                                 (0.3, 0.2, 0.45)),
-                                         colors_traps: Tuple[Tuple[float, float, float], ...] = (
-                                                 (0.3, 0.3, 0.3),
-                                                 (0.5, 0.5, 0.5)),
-                                         cell_classes: Tuple[int, ...] = (2, 3),
+                                         colors: Tuple[Tuple[float, float, float], ...] = (
+                                                 (0.05, 0.05, 0.05),
+                                                 (0.25, 0.25, 0.25)),
                                          white_background: bool = False) -> None:
     """
     Function plots given instance segmentation labels including the pixel-wise segmentation maps, bounding boxes,
@@ -523,8 +398,7 @@ def plot_instance_segmentation_map_label(instances: torch.Tensor, class_labels: 
     :param save: (bool) If true image will be saved (matplotlib is used)
     :param show: (bool) If true matplotlib plot of the image will be shown
     :param file_path: (str) File path to save the image
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize eachinstances.
     :param white_background: (bool) If true a white background is utilized
     """
     # Convert data to numpy
@@ -532,25 +406,13 @@ def plot_instance_segmentation_map_label(instances: torch.Tensor, class_labels: 
     class_labels = class_labels.detach().cpu().numpy()
     # Init map to visualize instances
     instances_map = np.zeros((instances.shape[1], instances.shape[2], 3), dtype=np.float)
-    # Init counters to track the number of cells and traps for different colours
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Instances to instances map
     for instance, class_label in zip(instances, class_labels):
-        # Case if cell is present
-        if bool(class_label >= min(cell_classes)):
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instances_map += np.array(colors_cells[min(counter_cell_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                             * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_cell_instance += 1
-        # Cas if trap is present
-        else:
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instances_map += np.array(colors_traps[min(counter_trap_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                             * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_trap_instance += 1
+        # Add pixels of current instance, in the corresponding colour, to instances map
+        instances_map += np.array(colors[class_label]).reshape(1, 1, 3) \
+                         * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
+
     # Init figure
     fig, ax = plt.subplots()
     # Set size
@@ -573,7 +435,7 @@ def plot_instance_segmentation_map_label(instances: torch.Tensor, class_labels: 
                     pad_inches=0)
     # Show figure if utilized
     if show:
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
     # Close figure
     plt.close()
 
@@ -609,20 +471,19 @@ def plot_image(image: torch.Tensor, save: bool = False, show: bool = False, file
         ax.set_axis_off()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
         # Close figure
         plt.close()
 
 
 def plot_instance_segmentation_overlay_bb_classes(image: torch.Tensor, bounding_boxes: torch.Tensor,
-                                                  class_labels: torch.Tensor, save: bool = False, show: bool = False,
+                                                  class_labels: torch.Tensor, class_list: torch.Tensor,
+                                                  save: bool = False, show: bool = False,
                                                   file_path: str = "",
                                                   show_class_label: bool = True,
-                                                  colors_cells: Tuple[Tuple[float, float, float], ...] =
-                                                  (1., 0., 0.89019608),
-                                                  colors_traps: Tuple[Tuple[float, float, float], ...] =
-                                                  (0.0, 0.0, 0.0),
-                                                  cell_classes: Tuple[int, ...] = (2, 3)) -> None:
+                                                  colors: Tuple[Tuple[float, float, float], ...] = (
+                                                          (0.05, 0.05, 0.05),
+                                                          (0.25, 0.25, 0.25)), ) -> None:
     """
     Function produces an instance segmentation plot
     :param image: (torch.Tensor) Input image of shape (3, height, width) or (1, height, width)
@@ -633,9 +494,7 @@ def plot_instance_segmentation_overlay_bb_classes(image: torch.Tensor, bounding_
     :param file_path: (str) Path and name where image will be stored
     :param show_class_label: (bool) If true class label is show in plot
     :param alpha: (float) Transparency factor
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
-    :param cell_classes: (Tuple[int, ...]) Tuple of cell classes
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize eachinstances.
     """
     # Normalize image to [0, 255]
     image = normalize_0_1(image)
@@ -654,32 +513,20 @@ def plot_instance_segmentation_overlay_bb_classes(image: torch.Tensor, bounding_
     ax.imshow(image)
     # Plot bounding_boxes and classes
     for index, bounding_box in enumerate(bounding_boxes):
-        # Case if cell is present
-        if bool(class_labels[index] >= min(cell_classes)):
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_cells,
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0])) - 2,
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1])) - 2,
-                        'Cell', horizontalalignment='right', verticalalignment='bottom', color="white", size=15)
-        # Cas if trap is present
-        else:
-            rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
-                                          float(bounding_box[2]) - float(bounding_box[0]),
-                                          float(bounding_box[3]) - float(bounding_box[1]),
-                                          linewidth=3,
-                                          edgecolor=colors_traps,
-                                          facecolor='none', ls='dashed')
-            ax.add_patch(rectangle)
-            if show_class_label:
-                ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0])) - 2,
-                        float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1])) - 2,
-                        'Trap', horizontalalignment='right', verticalalignment='bottom', color="white", size=15)
+        rectangle = patches.Rectangle((float(bounding_box[0]), float(bounding_box[1])),
+                                      float(bounding_box[2]) - float(bounding_box[0]),
+                                      float(bounding_box[3]) - float(bounding_box[1]),
+                                      linewidth=1,
+                                      edgecolor=colors[class_labels[index]],
+                                      alpha=0.5,
+                                      facecolor='none')
+        ax.add_patch(rectangle)
+        if show_class_label:
+            ax.text(float(bounding_box[0]) + (float(bounding_box[2]) - float(bounding_box[0])) - 2,
+                    float(bounding_box[1]) + (float(bounding_box[3]) - float(bounding_box[1])) - 2,
+                    class_list[class_labels[index] - 1], horizontalalignment='right', verticalalignment='bottom',
+                    color="white", size=8)
+
     # Axis off
     ax.set_axis_off()
     ax.get_xaxis().set_visible(False)
@@ -689,25 +536,16 @@ def plot_instance_segmentation_overlay_bb_classes(image: torch.Tensor, bounding_
         plt.savefig(file_path, dpi=image.shape[1] * 4 / 3.845, transparent=True, bbox_inches='tight', pad_inches=0)
     # Show figure if utilized
     if show:
-        plt.show(bbox_inches='tight', pad_inches=0)
+        plt.show()
     # Close figure
     plt.close()
 
 
 def plot_instance_segmentation_instances(instances: torch.Tensor, class_labels: torch.Tensor, save: bool = False,
                                          show: bool = False, file_path: str = "",
-                                         colors_cells: Tuple[Tuple[float, float, float], ...] = ((1., 0., 0.89019608),
-                                                                                                 (1., 0.5, 0.90980392),
-                                                                                                 (0.7, 0., 0.70980392),
-                                                                                                 (0.7, 0.5, 0.73333333),
-                                                                                                 (0.5, 0., 0.53333333),
-                                                                                                 (0.5, 0.2, 0.55294118),
-                                                                                                 (0.3, 0., 0.45),
-                                                                                                 (0.3, 0.2, 0.45)),
-                                         colors_traps: Tuple[Tuple[float, float, float], ...] = (
-                                                 (0.3, 0.3, 0.3),
-                                                 (0.5, 0.5, 0.5)),
-                                         cell_classes: Tuple[int, ...] = (2, 3),
+                                         colors: Tuple[Tuple[float, float, float], ...] = (
+                                                 (0.05, 0.05, 0.05),
+                                                 (0.25, 0.25, 0.25)),
                                          white_background: bool = False) -> None:
     """
     Function plots given instance segmentation labels including the pixel-wise segmentation maps, bounding boxes,
@@ -718,34 +556,21 @@ def plot_instance_segmentation_instances(instances: torch.Tensor, class_labels: 
     :param save: (bool) If true image will be saved (matplotlib is used)
     :param show: (bool) If true matplotlib plot of the image will be shown
     :param file_path: (str) File path to save the image
-    :param colors_cells: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each cell instances.
-    :param colors_traps: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each trap instances.
+    :param colors: (Tuple[Tuple[float, float, float], ...]) Tuple of RGB colors to visualize each instances.
     :param white_background: (bool) If true a white background is utilized
     """
     # Convert data to numpy
     instances = instances.detach().cpu().numpy()
     class_labels = class_labels.detach().cpu().numpy()
-    # Init counters to track the number of cells and traps for different colours
-    counter_cell_instance = 0
-    counter_trap_instance = 0
+
     # Instances to instances map
     for index, data in enumerate(zip(instances, class_labels)):
         # Unzip data
         instance, class_label = data
-        # Case if cell is present
-        if bool(class_label >= min(cell_classes)):
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instance = np.array(colors_cells[min(counter_cell_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                       * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_cell_instance += 1
-        # Cas if trap is present
-        else:
-            # Add pixels of current instance, in the corresponding colour, to instances map
-            instance = np.array(colors_traps[min(counter_trap_instance, len(colors_cells) - 1)]).reshape(1, 1, 3) \
-                       * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
-            # Increment counter
-            counter_trap_instance += 1
+        # Add pixels of current instance, in the corresponding colour, to instances map
+        instance = np.array(colors[class_label]).reshape(1, 1, 3) \
+                   * np.expand_dims(instance, axis=-1).repeat(3, axis=-1)
+
         # Init figure
         fig, ax = plt.subplots()
         # Set size
@@ -768,7 +593,7 @@ def plot_instance_segmentation_instances(instances: torch.Tensor, class_labels: 
                         transparent=True, bbox_inches='tight', pad_inches=0)
         # Show figure if utilized
         if show:
-            plt.show(bbox_inches='tight', pad_inches=0)
+            plt.show()
         # Close figure
         plt.close()
 
