@@ -208,7 +208,7 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
     for index, instance in enumerate(instances):
         for c in range(image.shape[-1]):
             image[:, :, c] = np.where(instance == 1,
-                                      image[:, :, c] * (1 - alpha) + alpha * colors[class_labels[index]][c],
+                                      image[:, :, c] * (1 - alpha) + alpha * colors[class_labels[index]-1][c],
                                       image[:, :, c])
 
     # Init figure
@@ -283,7 +283,7 @@ def plot_instance_segmentation_overlay_instances(image: torch.Tensor, instances:
         for c in range(image.shape[-1]):
             image[:, :, c] = np.where(instance == 1,
                                       image[:, :, c] * (1 - alpha) + alpha *
-                                      colors[class_labels[index]][c],
+                                      colors[class_labels[index]-1][c],
                                       image[:, :, c])
 
     # Init figure
