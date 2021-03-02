@@ -9,112 +9,175 @@ import numpy as np
 import misc
 import augmentation
 
+from typing import Callable, Tuple, List
 
-class CellInstanceSegmentation(Dataset):
+import torch
+import torch.nn.functional as F
+from torch.utils.data import Dataset
+from PIL import Image
+import os
+import numpy as np
+import albumentations as A
+import misc
+import augmentation
+import cv2
+from sklearn.preprocessing import OneHotEncoder
+import copy
+
+
+def extract_bboxes(mask):
+    """Compute bounding boxes from masks.
+    mask: [height, width, num_instances]. Mask pixels are either 1 or 0.
+
+    Returns: bbox array [num_instances, (x1, y1, x2, y2)].
     """
-    This dataset implements the cell instance segmentation dataset for the DETR model.
-    Dataset source: https://github.com/ChristophReich1996/BCS_Data/tree/master/Cell_Instance_Segmentation_Regular_Traps
-    """
-
-    def __init__(self, path: str = "../../BCS_Data/Cell_Instance_Segmentation_Regular_Traps/train",
-                 normalize: bool = True,
-                 normalization_function: Callable[[torch.Tensor], torch.Tensor] = misc.normalize,
-                 augmentation: Tuple[augmentation.Augmentation, ...] = (
-                         augmentation.VerticalFlip(), augmentation.NoiseInjection(), augmentation.ElasticDeformation()),
-                 augmentation_p: float = 0.5, return_absolute_bounding_box: bool = False,
-                 downscale: bool = True, downscale_shape: Tuple[int, int] = (128, 128),
-                 two_classes: bool = True) -> None:
-        """
-        Constructor method
-        :param path: (str) Path to dataset
-        :param normalize: (bool) If true normalization_function is applied
-        :param normalization_function: (Callable[[torch.Tensor], torch.Tensor]) Normalization function
-        :param augmentation: (Tuple[Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]]) Tuple of
-        augmentation functions to be applied
-        :param augmentation_p: (float) Probability that an augmentation is utilized
-        :param downscale: (bool) If true images and segmentation maps will be downscaled to a size of 256 X 256
-        :param downscale_shape: (Tuple[int, int]) Target shape is downscale is utilized
-        :param return_absolute_bounding_box: (Bool) If true the absolute bb is returned else the relative bb is returned
-        :param two_classes: (bool) If true only two classes, trap and cell, will be utilized
-        """
-        # Save parameters
-        self.normalize = normalize
-        self.normalization_function = normalization_function
-        self.augmentation = augmentation
-        self.augmentation_p = augmentation_p
-        self.return_absolute_bounding_box = return_absolute_bounding_box
-        self.downscale = downscale
-        self.downscale_shape = downscale_shape
-        self.two_class = two_classes
-        # Get paths of input images
-        self.inputs = []
-        for file in sorted(os.listdir(os.path.join(path, "inputs"))):
-            self.inputs.append(os.path.join(path, "inputs", file))
-        # Get paths of instances
-        self.instances = []
-        for file in sorted(os.listdir(os.path.join(path, "instances"))):
-            self.instances.append(os.path.join(path, "instances", file))
-        # Get paths of class labels
-        self.class_labels = []
-        for file in sorted(os.listdir(os.path.join(path, "classes"))):
-            self.class_labels.append(os.path.join(path, "classes", file))
-        # Get paths of bounding boxes
-        self.bounding_boxes = []
-        for file in sorted(os.listdir(os.path.join(path, "bounding_boxes"))):
-            self.bounding_boxes.append(os.path.join(path, "bounding_boxes", file))
-
-    def __len__(self) -> int:
-        """
-        Method returns the length of the dataset
-        :return: (int) Length of the dataset
-        """
-        return len(self.inputs)
-
-    def __getitem__(self, item: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Get item method
-        :param item: (int) Item to be returned of the dataset
-        :return: (Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]) Tuple including input image,
-        bounding box, class label and instances.
-        """
-        # Load data
-        input = torch.load(self.inputs[item]).unsqueeze(dim=0)
-        instances = torch.load(self.instances[item])
-        bounding_boxes = torch.load(self.bounding_boxes[item])
-        class_labels = torch.load(self.class_labels[item])
-        # Encode class labels as one-hot
-        if self.two_class:
-            class_labels = misc.to_one_hot(class_labels.clamp(max=2.0), num_classes=2 + 1)
+    boxes = np.zeros([mask.shape[-1], 4], dtype=np.int32)
+    for i in range(mask.shape[-1]):
+        m = mask[:, :, i]
+        # Bounding box.
+        horizontal_indicies = np.where(np.any(m, axis=0))[0]
+        vertical_indicies = np.where(np.any(m, axis=1))[0]
+        if horizontal_indicies.shape[0]:
+            x1, x2 = horizontal_indicies[[0, -1]]
+            y1, y2 = vertical_indicies[[0, -1]]
+            # x2 and y2 should not be part of the box. Increment by 1.
+            x2 += 1
+            y2 += 1
         else:
-            class_labels = misc.to_one_hot(class_labels, num_classes=3 + 1)
-        # Normalize input if utilized
-        if self.normalize:
-            input = self.normalization_function(input)
-        # Apply augmentation if needed
-        if np.random.random() < self.augmentation_p and self.augmentation is not None:
-            # Get augmentation
-            augmentation_to_be_applied = np.random.choice(self.augmentation)
-            # Apply augmentation
-            if augmentation_to_be_applied.need_labels():
-                input, instances, bounding_boxes = augmentation_to_be_applied(input, instances, bounding_boxes)
-            else:
-                input = augmentation_to_be_applied(input)
-        # Downscale data to 256 x 256 if utilized
-        if self.downscale:
-            # Apply height and width
-            bounding_boxes[..., [0, 2]] = bounding_boxes[..., [0, 2]] * (self.downscale_shape[0] / input.shape[-1])
-            bounding_boxes[..., [1, 3]] = bounding_boxes[..., [1, 3]] * (self.downscale_shape[1] / input.shape[-2])
-            input = F.interpolate(input=input.unsqueeze(dim=0),
-                                  size=self.downscale_shape, mode="bicubic", align_corners=False)[0]
-            instances = (F.interpolate(input=instances.unsqueeze(dim=0),
-                                       size=self.downscale_shape, mode="bilinear", align_corners=False)[
-                             0] > 0.75).float()
-        # Convert absolute bounding box to relative bounding box of utilized
-        if not self.return_absolute_bounding_box:
-            bounding_boxes = misc.absolute_bounding_box_to_relative(bounding_boxes=bounding_boxes,
-                                                                    height=input.shape[1], width=input.shape[2])
-        return input, instances, misc.bounding_box_x0y0x1y1_to_xcycwh(bounding_boxes), class_labels
+            # No mask for this instance. Might happen due to
+            # resizing or cropping. Set bbox to zeros
+            x1, x2, y1, y2 = 0, 0, 0, 0
+        boxes[i] = np.array([x1, y1, x2, y2])
+    return boxes.astype(np.int32)
 
+
+# classes for data loading and preprocessing
+class Dataset:
+    """
+    This Dataset implements the instance segmentation dataset for the DETR model.
+    Args:
+        images_dir (str): path to images folder
+        masks_dir (str): path to segmentation masks folder
+        class_values (list): values of classes to extract from segmentation mask
+        augmentation (albumentations.Compose): data transfromation pipeline
+            (e.g. flip, scale, etc.)
+        preprocessing (albumentations.Compose): data preprocessing
+            (e.g. noralization, shape manipulation, etc.)
+
+    """
+
+    CLASSES = ["11", "12", "13", "14", "15", "16", "17", "18", "21", "22", "23", "24", "25", "26", "27", "28", "31",
+               "32", "33", "34", "35", "36", "37", "38", "41", "42", "43", "44", "45", "46", "47", "48"]
+
+    def __init__(
+            self,
+            images_dir,
+            masks_dir,
+            classes=None,
+            augmentation=None,
+            preprocessing=None,
+    ):
+        self.ids = os.listdir(images_dir)
+        self.images_fps = [os.path.join(images_dir, image_id) for image_id in self.ids]
+        self.masks_fps = [os.path.join(masks_dir, image_id[:-4]) for image_id in self.ids]
+
+        # convert str names to class values on masks
+        self.class_values = [self.CLASSES.index(cls.lower()) for cls in classes]
+
+        self.augmentation = augmentation
+        self.preprocessing = preprocessing
+        self.size = 256
+
+    def __getitem__(self, i):
+
+        # read data
+        image = cv2.imread(self.images_fps[i])
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        image = cv2.resize(image, (self.size, self.size))
+        # image = misc.normalize(image)
+        input = torch.Tensor(np.expand_dims(image, 0))
+
+        mask_paths = self.masks_fps[i]
+        mask_collection = []
+        background = np.ones((self.size, self.size, 1)).astype('float')
+
+        labels = []
+        bbs = []
+
+        for label_idx, label in enumerate(self.CLASSES):
+
+            mask_path = '{}/{}.jpg'.format(mask_paths, label)
+
+            if os.path.isfile(mask_path) is True:
+                train_mask = np.array(Image.open(mask_path))
+                train_mask = cv2.resize(train_mask, (self.size, self.size))
+                train_mask = train_mask.clip(0, 1)
+                train_mask = train_mask.reshape(self.size, self.size, 1)
+                # bbs.append(extract_bboxes() )
+                x, y = np.nonzero(np.squeeze(train_mask))
+                background[x, y] = 0
+                one_hot_label = np.zeros(((len(self.CLASSES) + 1)))
+                one_hot_label[1 + int(label_idx)] = 1
+                labels.append(one_hot_label)
+
+                mask_collection.append(np.array(train_mask))
+
+        mask = np.squeeze(np.array(mask_collection))
+        noaug_mask = copy.deepcopy(mask)
+        bb = extract_bboxes(np.concatenate(mask_collection, axis=-1).astype('float'))
+
+        if self.augmentation is not None:
+            sample = self.augmentation(image=np.moveaxis(input.numpy(), 0, 2).astype(np.uint8), masks=list(mask))
+
+            input = torch.Tensor(np.moveaxis(sample['image'], 2, 0))
+            mask = np.array(sample['masks'])
+
+            if np.array_equal(mask, noaug_mask) is False:
+
+                image_center = (input.shape[2] // 2, input.shape[1] // 2)
+
+                bb[:, [0, 2]] += 2 * (image_center - bb[:, [0, 2]])
+                bounding_boxes_w = np.abs(bb[:, 0] - bb[:, 2])
+                bb[:, 0] -= bounding_boxes_w
+                bb[:, 2] += bounding_boxes_w
+
+                flip_label_dict = {
+                    "1": "2",
+                    "2": "1",
+                    "3": "4",
+                    "4": "3",
+                }
+
+                flipped_labels = []
+                for label in labels:
+
+                    old_label = np.argmax(label) - 1
+                    old_label = int(self.CLASSES[old_label])
+
+                    new_firstdigit = flip_label_dict[str(old_label)[0]]
+
+                    if len(str(old_label)) == 2:
+                        new_label = int(new_firstdigit + str(old_label)[1])
+
+                    else:
+                        new_label = int(new_firstdigit)
+
+                    new_label = self.CLASSES.index(str(new_label))
+                    one_hot_label = np.zeros(((len(self.CLASSES) + 1)))
+                    one_hot_label[1 + int(new_label)] = 1
+                    flipped_labels.append(one_hot_label)
+
+                    labels = flipped_labels
+
+        bbs = misc.absolute_bounding_box_to_relative(bounding_boxes=torch.Tensor(bb), height=input.shape[1],
+                                                     width=input.shape[2])
+
+        bbs_formated = misc.bounding_box_x0y0x1y1_to_xcycwh(bbs)
+
+        return input, torch.Tensor(mask), bbs_formated, torch.Tensor(labels)
+
+    def __len__(self):
+        return len(self.ids)
 
 def collate_function_cell_instance_segmentation(
         batch: List[Tuple[torch.Tensor]]) -> \
