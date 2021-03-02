@@ -293,8 +293,7 @@ class ModelWrapper(object):
         self.logger.save_metrics(path=self.path_save_metrics)
 
     @torch.no_grad()
-    def test(self, num_classes,
-             test_metrics_classification: Tuple[nn.Module, ...] = (validation_metric.ClassificationAccuracy(),),
+    def test(self, test_metrics_classification: Tuple[nn.Module, ...] = (validation_metric.ClassificationAccuracy(),),
              test_metrics_bounding_box: Tuple[nn.Module, ...] = (
                      nn.L1Loss(), nn.MSELoss(), validation_metric.BoundingBoxIoU(),
                      validation_metric.BoundingBoxGIoU()),
@@ -473,12 +472,12 @@ class ModelWrapper(object):
         self.logger.save_metrics(path=self.path_save_metrics)
 
     @torch.no_grad()
-    def inference(self, num_classes) -> None:
+    def inference(self) -> None:
         """
         Inference method: plots segmentation mask and bounding boxes for visual inspections.
         """
 
-        colormap = dict.fromkeys(list(range(0, num_classes + 2)))
+        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
 
         for key in colormap.keys():
             r = float(np.random.randint(0, 255)) / 255
@@ -603,6 +602,5 @@ class ModelWrapper(object):
 #                                                            self.path_save_plots,
 #                                                           "test_plot_{}_bbn_c.png".format(
 #                                                             index)))
-
 
 
