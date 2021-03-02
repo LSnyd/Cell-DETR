@@ -45,14 +45,26 @@ convolution implementation are adopted slightly and are included in this reposit
 by exicuting the following commands
 
 ```shell script
-git clone https://github.com/ChristophReich1996/Cell-DETR.git
+git submodule add https://github.com/LSnyd/Cell-DETR.git
 cd Cell-DETR
 pip install -r requirements.txt
-git clone https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch
+git submodule add https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch
 cd Deformable-Convolution-V2-PyTorch
 git checkout pytorch_1.0.0
 python setup.py build install
 cd ../pade_activation_unit/cuda
+```
+
+Before building and installing the pade_activation_unit, it may be necessary to cancel out the extra_compile_args in the setup.py (line 312-314) file in the cuda folder: 
+
+```shell script
+# extra_compile_args={'cxx': [],
+# 'nvcc': ['-gencode=arch=compute_60,code="sm_60,compute_60"', '-lineinfo',
+#  "-ccbin=gcc-6.3.0"]}
+```            
+Afterwards run: 
+
+```shell script
 python setup.py build install
 ```
 
