@@ -175,6 +175,15 @@ class ModelWrapper(object):
         :param number_of_plots: (int) Number of validation plot to be produced
         :param train: (bool) Train flag if set best model is saved based on val iou
         """
+
+        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
+
+        for key in colormap.keys():
+            r = float(np.random.randint(0, 255)) / 255
+            g = float(np.random.randint(0, 255)) / 255
+            b = float(np.random.randint(0, 255)) / 255
+            colormap[key] = (r, g, b)
+
         # DETR to device
         self.detr.to(self.device)
         # DETR into eval mode
@@ -263,6 +272,7 @@ class ModelWrapper(object):
                                                                                  class_labels=object_classes[
                                                                                      object_indexes],
                                                                                  class_list=self.class_labels,
+                                                                                 colors=colormap,
                                                                                  show=False, save=True,
                                                                                  file_path=os.path.join(
                                                                                      self.path_save_plots,
