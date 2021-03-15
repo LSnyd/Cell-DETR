@@ -33,6 +33,7 @@ class ModelWrapper(object):
                  class_labels: ["11", "12", "13", "14", "15", "16", "17", "18", "21", "22", "23", "24", "25", "26",
                                 "27", "28", "31", "32", "33", "34", "35", "36", "37", "38", "41", "42", "43", "44",
                                 "45", "46", "47", "48"],
+                 colors: list,
                  loss_function: nn.Module,
                  learning_rate_schedule: torch.optim.lr_scheduler.MultiStepLR = None,
                  device: str = "cuda",
@@ -60,6 +61,7 @@ class ModelWrapper(object):
         self.validation_dataset = validation_dataset
         self.test_dataset = test_dataset
         self.class_labels = class_labels
+        self.colors = colors
         self.loss_function = loss_function
         self.learning_rate_schedule = learning_rate_schedule
         self.device = device
@@ -176,14 +178,6 @@ class ModelWrapper(object):
         :param train: (bool) Train flag if set best model is saved based on val iou
         """
 
-        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
-
-        for key in colormap.keys():
-            r = float(np.random.randint(0, 255)) / 255
-            g = float(np.random.randint(0, 255)) / 255
-            b = float(np.random.randint(0, 255)) / 255
-            colormap[key] = (r, g, b)
-
         # DETR to device
         self.detr.to(self.device)
         # DETR into eval mode
@@ -272,7 +266,7 @@ class ModelWrapper(object):
                                                                                  class_labels=object_classes[
                                                                                      object_indexes],
                                                                                  class_list=self.class_labels,
-                                                                                 colors=colormap,
+                                                                                 colors=self.colors,
                                                                                  show=False, save=True,
                                                                                  file_path=os.path.join(
                                                                                      self.path_save_plots,
@@ -319,13 +313,6 @@ class ModelWrapper(object):
         :param test_metrics_segmentation: (Tuple[nn.Module, ...]) Test modules for segmentation
         """
 
-        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
-
-        for key in colormap.keys():
-            r = float(np.random.randint(0, 255)) / 255
-            g = float(np.random.randint(0, 255)) / 255
-            b = float(np.random.randint(0, 255)) / 255
-            colormap[key] = (r, g, b)
 
         # DETR to device
         self.detr.to(self.device)
@@ -412,7 +399,7 @@ class ModelWrapper(object):
                                                                              class_labels=object_classes[
                                                                                  object_indexes],
                                                                              class_list=self.class_labels,
-                                                                             colors=colormap,
+                                                                             colors=self.colors,
                                                                              show=False, save=True,
                                                                              file_path=os.path.join(
                                                                                  self.path_save_plots,
@@ -424,7 +411,7 @@ class ModelWrapper(object):
                                                                              bounding_boxes=bounding_box_predictions,
                                                                              class_labels=object_classes[
                                                                                  object_indexes],
-                                                                             colors=colormap,
+                                                                             colors=self.colors,
                                                                              class_list=self.class_labels,
                                                                              show=False, save=True,
                                                                              show_class_label=False,
@@ -436,7 +423,7 @@ class ModelWrapper(object):
                                                                   instances=(instance_predictions[0][
                                                                                  object_indexes] > 0.5).float(),
                                                                   class_labels=object_classes[object_indexes],
-                                                                  colors=colormap,
+                                                                  colors=self.colors,
                                                                   show=False, save=True,
                                                                   file_path=os.path.join(
                                                                       self.path_save_plots,
@@ -445,7 +432,7 @@ class ModelWrapper(object):
                                                                    bounding_boxes=bounding_box_predictions,
                                                                    class_labels=object_classes[
                                                                        object_indexes],
-                                                                   colors=colormap,
+                                                                   colors=self.colors,
                                                                    class_list=self.class_labels,
                                                                    show=False, save=True,
                                                                    file_path=os.path.join(
@@ -455,13 +442,13 @@ class ModelWrapper(object):
                 misc.plot_instance_segmentation_labels(
                     instances=(instance_predictions[0][object_indexes] > 0.5).float(),
                     bounding_boxes=bounding_box_predictions,
-                    class_labels=object_classes[object_indexes], class_list=self.class_labels, colors=colormap,
+                    class_labels=object_classes[object_indexes], class_list=self.class_labels, colors=self.colors,
                     show=False, save=True,
                     file_path=os.path.join(self.path_save_plots, "test_plot_{}_bb_no_overlay_.png".format(index)),
                     show_class_label=False, white_background=True)
                 misc.plot_instance_segmentation_map_label(
                     instances=(instance_predictions[0][object_indexes] > 0.5).float(),
-                    class_labels=object_classes[object_indexes], colors=colormap, show=False, save=True,
+                    class_labels=object_classes[object_indexes], colors=self.colors, show=False, save=True,
                     file_path=os.path.join(self.path_save_plots, "test_plot_{}_no_overlay.png".format(index)),
                     white_background=True)
         # Average metrics and save them in logs
@@ -486,14 +473,6 @@ class ModelWrapper(object):
         """
         Inference method: plots segmentation mask and bounding boxes for visual inspections.
         """
-
-        colormap = dict.fromkeys(list(range(0, len(self.class_labels) + 2)))
-
-        for key in colormap.keys():
-            r = float(np.random.randint(0, 255)) / 255
-            g = float(np.random.randint(0, 255)) / 255
-            b = float(np.random.randint(0, 255)) / 255
-            colormap[key] = (r, g, b)
 
         # DETR to device
         self.detr.to(self.device)
@@ -545,7 +524,7 @@ class ModelWrapper(object):
                                                                   instances=(instance_predictions[0][
                                                                                  object_indexes] > 0.5).float(),
                                                                   class_labels=object_classes[object_indexes],
-                                                                  colors=colormap,
+                                                                  colors=self.colors,
                                                                   show=True, save=False,
                                                                   file_path=os.path.join(
                                                                       self.path_save_plots,
@@ -554,7 +533,7 @@ class ModelWrapper(object):
                                                                    bounding_boxes=bounding_box_predictions,
                                                                    class_labels=object_classes[
                                                                        object_indexes],
-                                                                   colors=colormap,
+                                                                   colors=self.colors,
                                                                    class_list=self.class_labels,
                                                                    show=True, save=False,
                                                                    file_path=os.path.join(
