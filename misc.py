@@ -207,6 +207,7 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
     # Add instances to image
     for index, instance in enumerate(instances):
         for c in range(image.shape[-1]):
+            print()
             image[:, :, c] = np.where(instance == 1,
                                       image[:, :, c] * (1 - alpha) + alpha * colors[class_labels[index]-1][c],
                                       image[:, :, c])
@@ -225,7 +226,7 @@ def plot_instance_segmentation_overlay_instances_bb_classes(image: torch.Tensor,
                                       float(bounding_box[2]) - float(bounding_box[0]),
                                       float(bounding_box[3]) - float(bounding_box[1]),
                                       linewidth=1,
-                                      edgecolor=colors[class_labels[index]],
+                                      edgecolor=colors[index],
                                       facecolor='none')
         ax.add_patch(rectangle)
         if show_class_label:
@@ -360,7 +361,7 @@ def plot_instance_segmentation_labels(instances: torch.Tensor, bounding_boxes: t
                                       float(bounding_box[2]) - float(bounding_box[0]),
                                       float(bounding_box[3]) - float(bounding_box[1]),
                                       linewidth=1,
-                                      edgecolor=colors[class_labels[index]],
+                                      edgecolor=colors[index],
                                       facecolor='none')
         ax.add_patch(rectangle)
         if show_class_label:
@@ -517,7 +518,7 @@ def plot_instance_segmentation_overlay_bb_classes(image: torch.Tensor, bounding_
                                       float(bounding_box[2]) - float(bounding_box[0]),
                                       float(bounding_box[3]) - float(bounding_box[1]),
                                       linewidth=1,
-                                      edgecolor=colors[class_labels[index]],
+                                      edgecolor=colors[index],
                                       alpha=0.5,
                                       facecolor='none')
         ax.add_patch(rectangle)
