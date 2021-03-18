@@ -34,11 +34,11 @@ class ModelWrapper(object):
                                 "27", "28", "31", "32", "33", "34", "35", "36", "37", "38", "41", "42", "43", "44",
                                 "45", "46", "47", "48"],
                  colors: list,
-                 experiment: str = "first_run",
                  loss_function: nn.Module,
                  learning_rate_schedule: torch.optim.lr_scheduler.MultiStepLR = None,
                  device: str = "cuda",
                  save_data_path: str = "model_zoo/Cell-DETR",
+                 experiment: str = "first_run",
                  use_telegram: bool = True) -> None:
         """
         Constructor method
@@ -592,5 +592,4 @@ class ModelWrapper(object):
 #                                                            self.path_save_plots,
 #                                                           "test_plot_{}_bbn_c.png".format(
 #                                                             index)))
-
 
