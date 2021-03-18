@@ -34,6 +34,7 @@ class ModelWrapper(object):
                                 "27", "28", "31", "32", "33", "34", "35", "36", "37", "38", "41", "42", "43", "44",
                                 "45", "46", "47", "48"],
                  colors: list,
+                 experiment: str = "first_run",
                  loss_function: nn.Module,
                  learning_rate_schedule: torch.optim.lr_scheduler.MultiStepLR = None,
                  device: str = "cuda",
@@ -62,6 +63,7 @@ class ModelWrapper(object):
         self.test_dataset = test_dataset
         self.class_labels = class_labels
         self.colors = colors
+        self.experiment = experiment
         self.loss_function = loss_function
         self.learning_rate_schedule = learning_rate_schedule
         self.device = device
@@ -70,8 +72,7 @@ class ModelWrapper(object):
         # Init logger
         self.logger = misc.Logger()
         # Make directories to save logs, plots and models during training
-        time_and_date = str(datetime.now())
-        save_data_path = os.path.join(save_data_path, time_and_date)
+        save_data_path = os.path.join(save_data_path, experiment)
         os.makedirs(save_data_path, exist_ok=True)
         self.path_save_models = os.path.join(save_data_path, "models")
         os.makedirs(self.path_save_models, exist_ok=True)
